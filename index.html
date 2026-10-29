@@ -1,5 +1,10 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B0E13">
 <title>LOTTERS Bodensystem</title>
-<meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="LOTTERS Bodensystem aus Stockach am Bodensee: patentiertes Aluminium-Terrassensystem mit integrierter Wasserableitung für WPC-Dielen und Feinsteinzeug. Terrasse online planen, Stückliste live sehen, Aufmaß anfragen.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -44,6 +49,8 @@
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;scroll-behavior:auto}
+body{margin:0}
+[hidden]{display:none!important}
 body{background:var(--canvas);color:var(--ink);font-family:var(--font);font-size:17px;line-height:1.55;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow-x:hidden}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:60;background:var(--night)}
 img{max-width:100%;display:block}
@@ -551,6 +558,8 @@ html.is-loading,html.is-loading body{overflow:hidden}
 }
 </style>
 
+</head>
+<body>
 <div class="pre" id="pre" role="status" aria-live="polite">
   <span class="sr">Seite wird geladen</span>
   <div class="pre-mark" aria-hidden="true">
@@ -1809,3 +1818,5 @@ if (!RM) {
 $$('[data-copy]').forEach(b => b.addEventListener('click', () => copyText($('#' + b.dataset.copy).textContent.trim(), 'Kopiert')));
 addEventListener('load', () => ScrollTrigger.refresh());
 </script>
+</body>
+</html>

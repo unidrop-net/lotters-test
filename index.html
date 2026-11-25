@@ -1182,7 +1182,7 @@ function loadTex(url, srgb = true) {
 }
 // hero_wa_d → Kamera „hero“; xr_1 → „xr“; cfg_sh_n → „cfg“
 const camOf = key => key.split('_')[0];
-const srcOf = key => `img/r/${key}.jpg`;
+const srcOf = key => `img/r/${key}.jpg${key === 'hero_wa_d' ? '?v=2' : ''}`;
 const depthOf = key => `img/r/z_${/^xr_/.test(key) ? key : camOf(key)}.jpg`;
 const shotReady = {}, shotData = {};
 function loadShot(key) {
@@ -1627,7 +1627,7 @@ const stillAt = k => [heroKey(), 'xr_0', 'xr_1', 'xr_2', heroKey()][k];
 function applySeq() {
   const s = clamp(heroState.s, 0, 4);
   const f = s <= 1 ? s * 31 : s <= 2 ? 32 + (s - 1) * 23 : s <= 3 ? 56 + (s - 2) * 19 : 75 - (s - 3) * 75;
-  const k = Math.round(s), dist = Math.abs(s - k), w = clamp(1 - dist / .06);
+  const k = Math.round(s), dist = Math.abs(s - k), w = clamp(1 - dist / (k === 0 || k === 4 ? .24 : .06));
   if (w >= 1 && shotData[stillAt(k)]) { hero.frameMix(null, null, 0, stillAt(k), 1); return; }
   const i0 = Math.min(NFR - 1, Math.floor(f)), i1 = Math.min(NFR - 1, i0 + 1), ld = i => frames[i] && frames[i].complete && frames[i].naturalWidth ? frames[i] : null;
   let a = ld(i0), b = ld(i1); if (!a) { frameImg(i0); frameImg(i1); a = nearestFrame(i0); b = null; }

@@ -1182,7 +1182,7 @@ function loadTex(url, srgb = true) {
 }
 // hero_wa_d → Kamera „hero“; xr_1 → „xr“; cfg_sh_n → „cfg“
 const camOf = key => key.split('_')[0];
-const srcOf = key => `img/r/${key}.jpg${/^hero_/.test(key) ? '?v=3' : ''}`;
+const srcOf = key => `img/r/${key}.jpg?v=4`;
 const depthOf = key => `img/r/z_${/^xr_/.test(key) ? key : camOf(key)}.jpg`;
 const shotReady = {}, shotData = {};
 function loadShot(key) {
@@ -1618,7 +1618,7 @@ function heroSwap(id) {
 }
 // Scroll-Röntgen als gerenderte Kamerafahrt: Totale → Systemansicht → Dielen heben ab → Profile heben ab → zurück
 const SEQN = { move: 32, planks: 24, profiles: 20 }, SEQ0 = { move: 0, planks: 32, profiles: 56 }, NFR = 76;
-const frameURL = i => { const seg = i < 32 ? 'move' : i < 56 ? 'planks' : 'profiles'; return `img/r/seq/${seg}_${String(i - SEQ0[seg]).padStart(3, '0')}.jpg`; };
+const frameURL = i => { const seg = i < 32 ? 'move' : i < 56 ? 'planks' : 'profiles'; return `img/r/seq/${seg}_${String(i - SEQ0[seg]).padStart(3, '0')}.jpg?v=2`; };
 const frames = new Array(NFR);
 function frameImg(i) { if (!frames[i]) { const im = new Image(); im.decoding = 'async'; im.src = frameURL(i); frames[i] = im; } return frames[i]; }
 function nearestFrame(i) { for (let k = 0; k < NFR; k++) for (const j of [i - k, i + k]) if (j >= 0 && j < NFR && frames[j] && frames[j].complete && frames[j].naturalWidth) return frames[j]; return null; }

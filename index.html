@@ -1182,7 +1182,7 @@ function loadTex(url, srgb = true) {
 }
 // hero_wa_d → Kamera „hero“; xr_1 → „xr“; cfg_sh_n → „cfg“
 const camOf = key => key.split('_')[0];
-const srcOf = key => `img/r/${key}.jpg${/^hero_\w+_d$/.test(key) ? '?v=2' : ''}`;
+const srcOf = key => `img/r/${key}.jpg${/^hero_/.test(key) ? '?v=3' : ''}`;
 const depthOf = key => `img/r/z_${/^xr_/.test(key) ? key : camOf(key)}.jpg`;
 const shotReady = {}, shotData = {};
 function loadShot(key) {

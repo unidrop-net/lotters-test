@@ -184,6 +184,8 @@ p{margin:0}
 .xr-s small{font-size:15px;color:var(--on-night-2);line-height:1.5}
 .lbls{position:absolute;inset:0;pointer-events:none}
 .lbl{position:absolute;left:0;top:0;opacity:0;will-change:transform,opacity}
+/* über dem bewegten Bild kein Live-Weichzeichner: der müsste bei jedem Bild der Fahrt neu gerechnet werden */
+#xr.glass-d,#rail.glass-d,.lbl .glass-d,.lbl.glass-d{-webkit-backdrop-filter:none;backdrop-filter:none;background:rgba(13,16,21,.78)}
 .lbl i{position:absolute;left:-5px;top:-5px;width:10px;height:10px;border-radius:50%;background:#fff;box-shadow:0 0 0 5px rgba(255,255,255,.18)}
 .lbl b.ln{position:absolute;left:0;bottom:0;width:1px;height:52px;background:linear-gradient(to top,rgba(255,255,255,.75),rgba(255,255,255,.2))}
 .lbl .tag{position:absolute;left:-14px;bottom:56px;display:grid;gap:1px;padding:9px 14px 10px;border-radius:14px;white-space:nowrap}
@@ -1192,6 +1194,7 @@ const LBL = { belag: [.58, .32], profil: [.45, .52], fuss: [.36, .68], grund: [.
 
 const vs25 = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }`;
 const fs25 = `uniform sampler2D tA; uniform sampler2D tB; uniform sampler2D zA; uniform sampler2D zB;
+uniform sampler2D tF; uniform sampler2D tS; uniform sampler2D zS; uniform vec4 fc; uniform float fs; uniform float fOn; uniform float sW;
 uniform float mixF; uniform float zoom; uniform float foc; uniform float amt; uniform float dim; uniform vec2 off; uniform vec2 scl; uniform vec2 ctr; varying vec2 vUv;
 vec3 samp(sampler2D t, sampler2D z, vec2 uv){
   float d = texture2D(z, uv).r; vec2 o = off * (d - foc) * amt;
@@ -1200,26 +1203,50 @@ vec3 samp(sampler2D t, sampler2D z, vec2 uv){
 }
 void main(){
   vec2 uv = (vUv - .5) * scl / zoom + ctr;
-  vec3 a = samp(tA, zA, uv), b = samp(tB, zB, uv);
-  gl_FragColor = vec4(mix(a, b, smoothstep(0., 1., mixF)) * dim, 1.);
+  vec3 c;
+  if (fOn > .5) {
+    // echte Zwischenbilder: beide Nachbarbilder werden entlang des Bewegungsfelds aufeinander zu verschoben
+    vec2 q = clamp(uv, vec2(.012), vec2(.988));
+    vec2 F = (texture2D(tF, fc.xy + q * fc.zw).rg * 2. - 1.) * fs; F.y = -F.y;
+    vec3 a = texture2D(tA, clamp(uv - mixF * F, vec2(.001), vec2(.999))).rgb, b = texture2D(tB, clamp(uv + (1. - mixF) * F, vec2(.001), vec2(.999))).rgb;
+    c = mix(a, b, mixF);
+  } else { c = mix(samp(tA, zA, uv), samp(tB, zB, uv), smoothstep(0., 1., mixF)); }
+  if (sW > 0.) c = mix(c, samp(tS, zS, uv), smoothstep(0., 1., sW));
+  gl_FragColor = vec4(c * dim, 1.);
   #include <colorspace_fragment>
 }`;
 
+// größte Verschiebung je Bildpaar der Kamerafahrt (Anteil der Bildbreite), passend zu img/r/seq/flow.png
+const FSC = [0.00127,0.0156,0.04291,0.0803,0.15383,0.22298,0.04268,0.08346,0.17483,0.23465,0.17464,0.12307,0.10666,0.07815,0.08022,0.12792,0.05681,0.15737,0.10346,0.13855,0.08739,0.0602,0.05303,0.04075,0.04912,0.04506,0.03016,0.02527,0.01223,0.00524,0.00421,0.0001,0.00022,0.00273,0.00485,0.02013,0.03636,0.03783,0.03119,0.07565,0.03923,0.03796,0.03718,0.02074,0.02916,0.02448,0.01656,0.01599,0.01712,0.01026,0.02538,0.00481,0.01169,0.00369,0.00132,0.0001,0.00042,0.00297,0.00797,0.01606,0.02281,0.02662,0.02612,0.02386,0.02182,0.02007,0.01918,0.01783,0.0173,0.02092,0.01705,0.01066,0.00446,0.00257,0.00131];
 function Scene25(canvas, opts = {}) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2)); renderer.outputColorSpace = THREE.SRGBColorSpace;
   const scene = new THREE.Scene(), cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-  const U = { tA: { value: null }, tB: { value: null }, zA: { value: null }, zB: { value: null }, mixF: { value: 0 }, zoom: { value: 1 }, foc: { value: opts.foc ?? .5 },
+  const U = { tA: { value: null }, tB: { value: null }, zA: { value: null }, zB: { value: null }, tF: { value: null }, tS: { value: null }, zS: { value: null }, fc: { value: new THREE.Vector4(0, 0, .1, .125) }, fs: { value: 0 }, fOn: { value: 0 }, sW: { value: 0 }, mixF: { value: 0 }, zoom: { value: 1 }, foc: { value: opts.foc ?? .5 },
     amt: { value: opts.amt ?? .016 }, dim: { value: 1 }, off: { value: new THREE.Vector2() }, scl: { value: new THREE.Vector2(1, 1) }, ctr: { value: new THREE.Vector2(.5, .5) } };
   scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({ uniforms: U, vertexShader: vs25, fragmentShader: fs25, depthTest: false, depthWrite: false })));
   const st = { zoom: opts.zoom ?? 1, push: 0, dim: 1, ready: false, A: null, B: null, par: 1 };
   const flatZ = new THREE.DataTexture(new Uint8Array([128, 128, 128, 255]), 1, 1); flatZ.needsUpdate = true;
-  const fcache = new Map(), FCAP = SMALL ? 5 : 10;
-  function ftexOf(img) {
-    let t = fcache.get(img); if (t) { fcache.delete(img); fcache.set(img, t); return t; }
-    t = new THREE.Texture(img); t.colorSpace = THREE.SRGBColorSpace; t.minFilter = t.magFilter = THREE.LinearFilter; t.generateMipmaps = false; t.needsUpdate = true; fcache.set(img, t);
-    if (fcache.size > FCAP) for (const [k, o] of fcache) { if (o !== U.tA.value && o !== U.tB.value && o !== t) { o.dispose(); fcache.delete(k); break; } }
-    return t;
+  // Kamerafahrt: Bilder werden abseits des Hauptthreads dekodiert und im Voraus auf die Grafikkarte geladen,
+  // damit beim Scrollen kein Bildwechsel auf Dekodieren oder Hochladen warten muss
+  const SQ = { urls: null, blobs: [], tex: new Map(), busy: new Set(), up: [], f: 0, dir: 1, dec: 0, opt: true, last: null };
+  const W_A = SMALL ? 5 : 10, W_B = SMALL ? 2 : 4;
+  function seqDecode(i) {
+    if (SQ.tex.has(i) || SQ.busy.has(i) || !SQ.blobs[i] || SQ.dec >= 3) return;
+    SQ.busy.add(i); SQ.dec++;
+    const fin = t => { SQ.dec--; if (t) { t.colorSpace = THREE.SRGBColorSpace; t.minFilter = t.magFilter = THREE.LinearFilter; t.generateMipmaps = false; t.needsUpdate = true; SQ.up.push([i, t]); } else SQ.busy.delete(i); seqPump(); };
+    const viaImg = () => { const im = new Image(), u = URL.createObjectURL(SQ.blobs[i]); im.src = u; (im.decode ? im.decode() : new Promise((r, j) => { im.onload = r; im.onerror = j; })).then(() => { URL.revokeObjectURL(u); fin(new THREE.Texture(im)); }, () => { URL.revokeObjectURL(u); fin(null); }); };
+    if (SQ.opt && self.createImageBitmap) createImageBitmap(SQ.blobs[i], { imageOrientation: 'flipY' }).then(bm => { const t = new THREE.Texture(bm); t.flipY = false; fin(t); }, () => { SQ.opt = false; viaImg(); });
+    else viaImg();
+  }
+  function seqPump() {
+    if (!SQ.urls) return; const n = SQ.urls.length, c = Math.round(SQ.f), lo = c - (SQ.dir > 0 ? W_B : W_A), hi = c + (SQ.dir > 0 ? W_A : W_B);
+    for (let d = 0; d <= W_A; d++) for (const i of d ? [c + d * SQ.dir, c - d * SQ.dir] : [c]) if (i >= lo && i <= hi && i >= 0 && i < n) seqDecode(i);
+    for (const [i, t] of SQ.tex) if ((i < lo - 3 || i > hi + 3) && t !== U.tA.value && t !== U.tB.value) { t.dispose(); SQ.tex.delete(i); }
+  }
+  function seqUpload() {
+    const e = SQ.up.shift(); if (!e) return; const [i, t] = e; renderer.initTexture(t); if (t.image && t.image.close) t.image.close();
+    SQ.busy.delete(i); SQ.tex.set(i, t); if (SQ.last && st.A === null) api.frameMix(...SQ.last);
   }
   const ptr = { x: 0, y: 0, tx: 0, ty: 0 }, size = { w: 1, h: 1 }, IA = 1.6;
   let fade = null;
@@ -1249,6 +1276,7 @@ function Scene25(canvas, opts = {}) {
   }
   function loop(now) {
     raf = 0; if (!visible || document.hidden) return;
+    seqUpload();
     const t = (now - t0) / 1000, k = RM ? 1 : 1 - Math.pow(.0016, 1 / 60);
     ptr.x += (ptr.tx - ptr.x) * k * 2.2; ptr.y += (ptr.ty - ptr.y) * k * 2.2;
     const dx = RM ? 0 : Math.sin(t * .21) * .32 + ptr.x * .9, dy = RM ? 0 : Math.cos(t * .17) * .18 + ptr.y * .45;
@@ -1259,7 +1287,7 @@ function Scene25(canvas, opts = {}) {
     U.off.value.set(dx * st.par, -dy * st.par);
     const z = st.zoom * (1 + st.push) * (RM ? 1 : 1 + Math.sin(t * .09) * .006);
     if (Math.abs(z - U.zoom.value) > 1e-5) { U.zoom.value = z; layout(); }
-    U.dim.value = st.dim;
+    U.dim.value = st.dim; if (st.A !== null) { U.fOn.value = 0; U.sW.value = 0; }
     if (U.tA.value) renderer.render(scene, cam);
     opts.afterFrame && opts.afterFrame(api);
     raf = requestAnimationFrame(loop);
@@ -1274,14 +1302,24 @@ function Scene25(canvas, opts = {}) {
     async set(key) { const s = await loadShot(key); if (!s.t) return; st.A = key; fade = null; st.par = 1; setAB(s, s, 0); st.ready = true; },
     // Bild einer gerenderten Kamerafahrt, nahe an Haltepunkten weich in das scharfe Standbild überblendet
     // a/b: benachbarte Bilder der Kamerafahrt, fr: Anteil dazwischen (weiche Zwischenbilder statt Sprünge)
-    frameMix(a, b, fr, stillKey, w) {
-      const ok = i => i && i.complete && i.naturalWidth, s = shotData[stillKey];
-      if (s && s.t && w >= 1) { fade = null; U.tA.value = U.tB.value = s.t; U.zA.value = U.zB.value = s.z; U.mixF.value = 0; st.par = 1; st.A = stillKey; return; }
-      if (!ok(a)) return;
-      fade = null; st.A = null; const ta = ftexOf(a); U.tA.value = ta; U.zA.value = flatZ;
-      if (s && s.t && w > 0) { U.tB.value = s.t; U.zB.value = s.z; U.mixF.value = w; st.par = w; }
-      else if (ok(b) && b !== a) { U.tB.value = ftexOf(b); U.zB.value = flatZ; U.mixF.value = fr; st.par = 0; }
-      else { U.tB.value = ta; U.zB.value = flatZ; U.mixF.value = 0; st.par = 0; }
+    seqInit(urls) {
+      if (SQ.urls) return; SQ.urls = urls; let i = 0; loadTex('img/r/seq/flow.png', false).then(t => { U.tF.value = t; });
+      const next = () => { if (i >= urls.length) return; const k = i++; fetch(urls[k]).then(r => r.ok ? r.blob() : null).then(bl => { SQ.blobs[k] = bl; seqPump(); }, () => {}).then(next); };
+      for (let c = 0; c < 4; c++) next();
+    },
+    frameMix(f, stillKey, w) {
+      SQ.last = [f, stillKey, w]; if (f !== SQ.f) { SQ.dir = f > SQ.f ? 1 : -1; SQ.f = f; } seqPump();
+      const s = shotData[stillKey];
+      if (s && s.t && w >= 1) { fade = null; U.tA.value = U.tB.value = s.t; U.zA.value = U.zB.value = s.z; U.mixF.value = 0; st.par = 1; st.A = stillKey; dirty = true; return; }
+      const n = SQ.urls ? SQ.urls.length : 0, i0 = Math.min(n - 1, Math.floor(f)), i1 = Math.min(n - 1, i0 + 1);
+      let ta = SQ.tex.get(i0), tb = SQ.tex.get(i1), fr = f - i0;
+      if (!ta && !tb) { let bd = 1e9; for (const [i, t] of SQ.tex) { const d = Math.abs(i - f); if (d < bd) { bd = d; ta = t; } } tb = ta; fr = 0; }
+      else if (!ta) { ta = tb; fr = 0; } else if (!tb) { tb = ta; fr = 0; }
+      if (!ta) { st.A = null; return; }
+      fade = null; st.A = null; U.tA.value = ta; U.zA.value = flatZ; U.tB.value = tb; U.zB.value = flatZ; U.mixF.value = fr;
+      const fl = ta !== tb && fr > 0 && U.tF.value && FSC[i0]; U.fOn.value = fl ? 1 : 0;
+      if (fl) { U.fc.value.set((i0 % 10) / 10, 1 - (Math.floor(i0 / 10) + 1) / 8, .1, .125); U.fs.value = FSC[i0]; }
+      if (s && s.t && w > 0) { U.tS.value = s.t; U.zS.value = s.z; U.sW.value = w; st.par = w; } else { U.sW.value = 0; st.par = 0; }
       dirty = true;
     },
     // weicher Wechsel zu einem anderen Bild
@@ -1619,19 +1657,13 @@ function heroSwap(id) {
 // Scroll-Röntgen als gerenderte Kamerafahrt: Totale → Systemansicht → Dielen heben ab → Profile heben ab → zurück
 const SEQN = { move: 32, planks: 24, profiles: 20 }, SEQ0 = { move: 0, planks: 32, profiles: 56 }, NFR = 76;
 const frameURL = i => { const seg = i < 32 ? 'move' : i < 56 ? 'planks' : 'profiles'; return `img/r/seq/${seg}_${String(i - SEQ0[seg]).padStart(3, '0')}.jpg?v=2`; };
-const frames = new Array(NFR);
-function frameImg(i) { if (!frames[i]) { const im = new Image(); im.decoding = 'async'; im.src = frameURL(i); frames[i] = im; } return frames[i]; }
-function nearestFrame(i) { for (let k = 0; k < NFR; k++) for (const j of [i - k, i + k]) if (j >= 0 && j < NFR && frames[j] && frames[j].complete && frames[j].naturalWidth) return frames[j]; return null; }
-function preloadFrames() { let i = 0; const next = () => { if (i >= NFR) return; const im = frameImg(i++); im.onload = im.onerror = next; }; next(); next(); next(); }
+function preloadFrames() { hero.seqInit(Array.from({ length: NFR }, (_, i) => frameURL(i))); }
 const stillAt = k => [heroKey(), 'xr_0', 'xr_1', 'xr_2', heroKey()][k];
 function applySeq() {
   const s = clamp(heroState.s, 0, 4);
   const f = s <= 1 ? s * 31 : s <= 2 ? 32 + (s - 1) * 23 : s <= 3 ? 56 + (s - 2) * 19 : 75 - (s - 3) * 75;
   const k = Math.round(s), dist = Math.abs(s - k), w = clamp(1 - dist / (k === 0 || k === 4 ? .24 : .06));
-  if (w >= 1 && shotData[stillAt(k)]) { hero.frameMix(null, null, 0, stillAt(k), 1); return; }
-  const i0 = Math.min(NFR - 1, Math.floor(f)), i1 = Math.min(NFR - 1, i0 + 1), ld = i => frames[i] && frames[i].complete && frames[i].naturalWidth ? frames[i] : null;
-  let a = ld(i0), b = ld(i1); if (!a) { frameImg(i0); frameImg(i1); a = nearestFrame(i0); b = null; }
-  hero.frameMix(a, b, f - i0, stillAt(k), w);
+  hero.frameMix(f, stillAt(k), w);
   hero.st.push = 0;
 }
 const xr = $('#xr'), xs = $$('.xr-s');
